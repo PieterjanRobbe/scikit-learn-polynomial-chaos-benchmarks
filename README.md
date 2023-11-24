@@ -7,4 +7,4 @@ We compare these packages:
 - [pygpc](https://github.com/pygpc-polynomial-chaos/pygpc)
 - [scikit-learn](https://github.com/PieterjanRobbe/scikit-learn) (fork from [scikit-learn](https://github.com/scikit-learn/scikit-learn))
 
-See notebook `comparison.ipynb` for the results.
+See notebook [`comparison.ipynb`](comparison.ipynb) for the results.
