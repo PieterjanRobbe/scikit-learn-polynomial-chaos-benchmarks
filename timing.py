@@ -1,10 +1,8 @@
 # import statements
 import argparse
-import chaospy as cp
 import numpy as np
 import os
 import pickle as pk
-import pygpc
 
 # qualified import statements
 from collections import OrderedDict
@@ -15,20 +13,22 @@ from scipy.stats import uniform
 # =============================================================================
 # define a function to compute the PC expansion and the main sensitivity
 # indices using sklearn
-from sklearn.polynomial_chaos import PolynomialChaosRegressor
+from sklearn.polynomial_chaos import PolynomialChaosExpansion
 
 def main_sens_sklearn(X, y, degree):
 
     # fit pce
-    pce = PolynomialChaosRegressor(uniform(), degree=degree)
+    pce = PolynomialChaosExpansion(uniform(), degree=degree)
     pce.fit(X, y)
 
     # return main sensitivity indices
-    return pce.main_sens()
+    return pce.main_sens().flatten()
 
 # =============================================================================
 # define a function to compute the PC expansion and the main sensitivity
 # indices using chaospy
+import chaospy as cp
+
 def main_sens_chaospy(X, y, degree):
 
     # fit pce
@@ -42,6 +42,8 @@ def main_sens_chaospy(X, y, degree):
 # =============================================================================
 # define a function to compute the PC expansion and the main sensitivity
 # indices using pygpc
+import pygpc
+
 def main_sens_pygpc(X, y, degree):
 
     # extract dimension
@@ -101,11 +103,49 @@ def main_sens_pygpc(X, y, degree):
     return sobol.values[:dimension].ravel()
 
 # =============================================================================
+# define a function to compute the PC expansion and the main sensitivity
+# indices using openturns
+import openturns as ot
+
+def main_sens_openturns(X, y, degree):
+    # Ensure shapes and convert to OT Samples
+    X = np.asarray(X, dtype=float)
+    y = np.asarray(y, dtype=float).reshape(-1, 1)
+    in_s = ot.Sample(X.tolist())
+    out_s = ot.Sample(y.tolist())
+
+    dimension = X.shape[1]
+
+    # Joint distribution: independent Uniform(0,1) per input
+    marginals = [ot.Uniform(0.0, 1.0) for _ in range(dimension)]
+    distribution = ot.ComposedDistribution(marginals)  # (Independent copula by default)
+
+    # Polynomial basis consistent with each marginal
+    poly_factories = [
+        ot.StandardDistributionPolynomialFactory(distribution.getMarginal(i))
+        for i in range(dimension)
+    ]
+    enumerate_fn = ot.LinearEnumerateFunction(dimension)
+    product_basis = ot.OrthogonalProductPolynomialFactory(poly_factories, enumerate_fn)
+
+    # Total-degree ≤ degree
+    index_max = enumerate_fn.getStrataCumulatedCardinal(degree)
+
+    # Fixed basis size strategy
+    adaptive_strategy = ot.FixedStrategy(product_basis, index_max)
+
+    # Least-squares PCE on provided design (X, y)
+    algo = ot.FunctionalChaosAlgorithm(in_s, out_s, distribution, adaptive_strategy)
+    algo.run()
+    result = algo.getResult()
+
+    # Sobol' main indices
+    sobol = ot.FunctionalChaosSobolIndices(result)
+    return np.array([sobol.getSobolIndex(i) for i in range(dimension)])
+
+# =============================================================================
 # compute main sensitivity indices
 def compute_main_sens(dimension, degree, method):
-
-    # Let's fix the random seed for reproducibility.
-    np.random.seed(2023)
 
     # First, let's define the parameters in the model.
     a = np.array([1, 2, 5, 10, 20, 50, 100, 500])
@@ -116,7 +156,7 @@ def compute_main_sens(dimension, degree, method):
 
     # Next, let's generate some input/output data.
     distribution = uniform()
-    X = distribution.rvs((n, dimension))
+    X = distribution.rvs((n, dimension), random_state=2025)
     y = prod((abs(4*X_j - 2) + a_j) / (1 + a_j) for a_j, X_j in zip(a, X.T))
 
     # compute main sensitivity indices
@@ -126,6 +166,8 @@ def compute_main_sens(dimension, degree, method):
         return main_sens_chaospy(X, y, degree)
     elif method == "pygpc":
         return main_sens_pygpc(X, y, degree)
+    elif method == "openturns":
+        return main_sens_openturns(X, y, degree)
 
 # =============================================================================
 # main function
@@ -141,6 +183,7 @@ def main():
     # compute main sensitivity indices
     start_time = time()
     main_sens = compute_main_sens(args.dimension, args.degree, args.method)
+    print(main_sens)
     duration = time() - start_time
 
     # save results

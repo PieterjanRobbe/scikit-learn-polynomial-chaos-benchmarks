@@ -5,6 +5,7 @@ This repo contains a comparison of different packages for Polynomial Chaos expan
 We compare these packages:
 - [chaospy](https://github.com/jonathf/chaospy)
 - [pygpc](https://github.com/pygpc-polynomial-chaos/pygpc)
+- [OpenTURNS](https://openturns.github.io/openturns/latest/theory/meta_modeling/functional_chaos.html)
 - [scikit-learn](https://github.com/PieterjanRobbe/scikit-learn) (fork from [scikit-learn](https://github.com/scikit-learn/scikit-learn))
 
 See notebook [`comparison.ipynb`](comparison.ipynb) for the results.
